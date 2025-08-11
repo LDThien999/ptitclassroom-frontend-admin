@@ -1,19 +1,174 @@
 "use client";
-// import Chart from "react-apexcharts";
 import { ApexOptions } from "apexcharts";
-
 import dynamic from "next/dynamic";
-import { Dropdown } from "../ui/dropdown/Dropdown";
-import { MoreDotIcon } from "@/icons";
-import { useState } from "react";
-import { DropdownItem } from "../ui/dropdown/DropdownItem";
+import { useState, useEffect, useMemo } from "react";
+import api from "../../lib/interceptor"; // Adjust path to your interceptor
+import FloatingAlert from "../ui/alert/FloatingAlert"; // Adjust path to your alert component
+import { Dropdown } from "../ui/dropdown/Dropdown"; // Adjust path to your dropdown component
+import { DropdownItem } from "../ui/dropdown/DropdownItem"; // Adjust path to your dropdown item component
+import { MoreDotIcon } from "@/icons"; // Adjust path to your icon component
+
 // Dynamically import the ReactApexChart component
 const ReactApexChart = dynamic(() => import("react-apexcharts"), {
   ssr: false,
 });
 
-export default function MonthlyTarget() {
-  const series = [75.55];
+// Interfaces from ScoreStatisticsChart
+interface Classroom {
+  classroomId: string;
+  total: number;
+  subjectId: number;
+  subjectName: string;
+}
+
+interface ScoreResponse {
+  scoreDetailId: number;
+  score: number;
+  studentId: number;
+  classroomId: string;
+  typeofscore: string;
+}
+
+interface ApiResponse<T> {
+  result: T;
+  message?: string;
+  code: number;
+}
+
+interface ScorePagingResponse {
+  items: ScoreResponse[];
+  nextCursor: number;
+  hasNext: boolean;
+}
+
+interface Alert {
+  id: string;
+  type: "success" | "error";
+  title: string;
+  message: string;
+}
+
+export default function ScoreAboveFiveChart() {
+  const [classrooms, setClassrooms] = useState<Classroom[]>([]);
+  const [selectedClassroomId, setSelectedClassroomId] = useState<string>("");
+  const [allScores, setAllScores] = useState<ScoreResponse[]>([]);
+  const [selectedScoreType, setSelectedScoreType] = useState<string>("REGULAR");
+  const [loading, setLoading] = useState<boolean>(false);
+  const [alerts, setAlerts] = useState<Alert[]>([]);
+  const [isOpen, setIsOpen] = useState(false);
+  const pageSize = 20;
+
+  // Manage alerts
+  const addAlert = (type: "success" | "error", title: string, message: string) => {
+    const id = Math.random().toString(36).substring(2);
+    setAlerts((prev) => [...prev, { id, type, title, message }]);
+    setTimeout(() => removeAlert(id), 5000);
+  };
+
+  const removeAlert = (id: string) => {
+    setAlerts((prev) => prev.filter((alert) => alert.id !== id));
+  };
+
+  // Fetch classrooms
+  const fetchClassrooms = async () => {
+    try {
+      setLoading(true);
+      const response = await api.get<ApiResponse<Classroom[]>>(
+        `/score/get-classroom?cursor=0&page=0&size=100`
+      );
+      const classroomsData = response.data.result || [];
+      setClassrooms(classroomsData);
+      if (classroomsData.length > 0) {
+        setSelectedClassroomId(classroomsData[0].classroomId);
+      }
+    } catch (err) {
+      addAlert("error", "Error", err instanceof Error ? err.message : "Failed to load classrooms");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Fetch all scores for a classroom
+  const fetchAllScores = async (classId: string) => {
+    try {
+      setLoading(true);
+      let cursor = 0;
+      let all: ScoreResponse[] = [];
+      while (true) {
+        const queryParams = new URLSearchParams({
+          cursor: cursor.toString(),
+          page: "0",
+          size: pageSize.toString(),
+          classroomId: classId,
+        });
+        const response = await api.get<ApiResponse<ScorePagingResponse>>(
+          `/score/get-list-score?${queryParams.toString()}`
+        );
+        const { items, nextCursor, hasNext } = response.data.result || { items: [], nextCursor: 0, hasNext: false };
+        all = [...all, ...items];
+        cursor = nextCursor;
+        if (!hasNext) break;
+      }
+      setAllScores(all);
+    } catch (err) {
+      addAlert("error", "Error", err instanceof Error ? err.message : "Failed to load scores");
+      setAllScores([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Calculate percentage of students scoring above 5 for a specific score type
+  const getAboveFivePercentage = useMemo(() => (scores: ScoreResponse[], type: string) => {
+    const filteredScores = scores.filter((s) => s.typeofscore === type);
+    if (filteredScores.length === 0) return 0;
+    const aboveFive = filteredScores.filter((s) => s.score > 5).length;
+    return Number(((aboveFive / filteredScores.length) * 100).toFixed(2));
+  }, []);
+
+  // Calculate percentage of students with average scores above 5
+  const averageAboveFivePercentage = useMemo(() => {
+    const studentScores = new Map<number, { regular: number[]; midterm: number[]; final: number[] }>();
+    allScores.forEach((score) => {
+      if (!studentScores.has(score.studentId)) {
+        studentScores.set(score.studentId, { regular: [], midterm: [], final: [] });
+      }
+      const group = studentScores.get(score.studentId)!;
+      if (score.typeofscore === "REGULAR") group.regular.push(score.score);
+      else if (score.typeofscore === "MIDTERM") group.midterm.push(score.score);
+      else if (score.typeofscore === "FINAL") group.final.push(score.score);
+    });
+    const avgScores: number[] = [];
+    studentScores.forEach((groups) => {
+      const avgReg = groups.regular.length > 0 ? groups.regular.reduce((a, b) => a + b, 0) / groups.regular.length : 0;
+      const avgMid = groups.midterm.length > 0 ? groups.midterm.reduce((a, b) => a + b, 0) / groups.midterm.length : 0;
+      const avgFin = groups.final.length > 0 ? groups.final.reduce((a, b) => a + b, 0) / groups.final.length : 0;
+      const avg = avgReg * 0.1 + avgMid * 0.3 + avgFin * 0.6;
+      avgScores.push(avg);
+    });
+    if (avgScores.length === 0) return 0;
+    const aboveFive = avgScores.filter((score) => score > 5).length;
+    return Number(((aboveFive / avgScores.length) * 100).toFixed(2));
+  }, [allScores]);
+
+  // Select percentage based on score type
+  const series = useMemo(() => {
+    if (selectedScoreType === "AVERAGE") {
+      return [averageAboveFivePercentage];
+    }
+    return [getAboveFivePercentage(allScores, selectedScoreType)];
+  }, [allScores, selectedScoreType, averageAboveFivePercentage, getAboveFivePercentage]);
+
+  useEffect(() => {
+    fetchClassrooms();
+  }, []);
+
+  useEffect(() => {
+    if (selectedClassroomId) {
+      fetchAllScores(selectedClassroomId);
+    }
+  }, [selectedClassroomId]);
+
   const options: ApexOptions = {
     colors: ["#465FFF"],
     chart: {
@@ -34,7 +189,7 @@ export default function MonthlyTarget() {
         track: {
           background: "#E4E7EC",
           strokeWidth: "100%",
-          margin: 5, // margin is in pixels
+          margin: 5,
         },
         dataLabels: {
           name: {
@@ -59,150 +214,117 @@ export default function MonthlyTarget() {
     stroke: {
       lineCap: "round",
     },
-    labels: ["Progress"],
+    labels: ["Students Above 5"],
   };
 
-  const [isOpen, setIsOpen] = useState(false);
-
-  function toggleDropdown() {
+  const toggleDropdown = () => {
     setIsOpen(!isOpen);
-  }
+  };
 
-  function closeDropdown() {
+  const closeDropdown = () => {
     setIsOpen(false);
-  }
+  };
 
   return (
     <div className="rounded-2xl border border-gray-200 bg-gray-100 dark:border-gray-800 dark:bg-white/[0.03]">
+      {/* Alerts */}
+      {alerts.map((alert, index) => (
+        <FloatingAlert
+          key={alert.id}
+          type={alert.type}
+          title={alert.title}
+          message={alert.message}
+          onClose={() => removeAlert(alert.id)}
+          position="top-right"
+          className={`top-${5 + index * 15}`}
+        />
+      ))}
+
       <div className="px-5 pt-5 bg-white shadow-default rounded-2xl pb-11 dark:bg-gray-900 sm:px-6 sm:pt-6">
         <div className="flex justify-between">
           <div>
             <h3 className="text-lg font-semibold text-gray-800 dark:text-white/90">
-              Monthly Target
+              Students Scoring Above 5
             </h3>
             <p className="mt-1 font-normal text-gray-500 text-theme-sm dark:text-gray-400">
-              Target you’ve set for each month
+              Percentage of students with scores above 5 for the selected exam
             </p>
           </div>
           <div className="relative inline-block">
             <button onClick={toggleDropdown} className="dropdown-toggle">
               <MoreDotIcon className="text-gray-400 hover:text-gray-700 dark:hover:text-gray-300" />
             </button>
-            <Dropdown
-              isOpen={isOpen}
-              onClose={closeDropdown}
-              className="w-40 p-2"
-            >
+            <Dropdown isOpen={isOpen} onClose={closeDropdown} className="w-40 p-2">
               <DropdownItem
                 tag="a"
                 onItemClick={closeDropdown}
                 className="flex w-full font-normal text-left text-gray-500 rounded-lg hover:bg-gray-100 hover:text-gray-700 dark:text-gray-400 dark:hover:bg-white/5 dark:hover:text-gray-300"
               >
-                View More
+                View Details
               </DropdownItem>
               <DropdownItem
                 tag="a"
                 onItemClick={closeDropdown}
                 className="flex w-full font-normal text-left text-gray-500 rounded-lg hover:bg-gray-100 hover:text-gray-700 dark:text-gray-400 dark:hover:bg-white/5 dark:hover:text-gray-300"
               >
-                Delete
+                Reset
               </DropdownItem>
             </Dropdown>
           </div>
         </div>
-        <div className="relative ">
-          <div className="max-h-[330px]">
-            <ReactApexChart
-              options={options}
-              series={series}
-              type="radialBar"
-              height={330}
-            />
+
+        <div className="flex gap-4 mt-4">
+          <select
+            value={selectedClassroomId}
+            onChange={(e) => setSelectedClassroomId(e.target.value)}
+            className="rounded-md border border-gray-300 dark:border-gray-600 p-2 text-sm text-gray-800 dark:text-white dark:bg-gray-700"
+          >
+            <option value="">Select Classroom</option>
+            {classrooms.map((c) => (
+              <option key={c.classroomId} value={c.classroomId}>
+                {c.classroomId} - {c.subjectName}
+              </option>
+            ))}
+          </select>
+          <select
+            value={selectedScoreType}
+            onChange={(e) => setSelectedScoreType(e.target.value)}
+            className="rounded-md border border-gray-300 dark:border-gray-600 p-2 text-sm text-gray-800 dark:text-white dark:bg-gray-700"
+          >
+            <option value="REGULAR">Regular Scores</option>
+            <option value="MIDTERM">Midterm Scores</option>
+            <option value="FINAL">Final Scores</option>
+            <option value="AVERAGE">Average Scores</option>
+          </select>
+        </div>
+
+        {loading ? (
+          <div className="text-center text-gray-800 dark:text-white/90">Loading...</div>
+        ) : selectedClassroomId ? (
+          <div className="relative">
+            <div className="max-h-[330px]">
+              <ReactApexChart
+                options={options}
+                series={series}
+                type="radialBar"
+                height={330}
+              />
+            </div>
+            <span className="absolute left-1/2 top-full -translate-x-1/2 -translate-y-[95%] rounded-full bg-success-50 px-3 py-1 text-xs font-medium text-success-600 dark:bg-success-500/15 dark:text-success-500">
+              {series[0] > 50 ? "Excellent" : "Needs Improvement"}
+            </span>
           </div>
+        ) : (
+          <div className="text-center text-gray-800 dark:text-white/90">
+            Please select a classroom to view the percentage of students scoring above 5.
+          </div>
+        )}
 
-          <span className="absolute left-1/2 top-full -translate-x-1/2 -translate-y-[95%] rounded-full bg-success-50 px-3 py-1 text-xs font-medium text-success-600 dark:bg-success-500/15 dark:text-success-500">
-            +10%
-          </span>
-        </div>
         <p className="mx-auto mt-10 w-full max-w-[380px] text-center text-sm text-gray-500 sm:text-base">
-          You earn $3287 today, it&apos;s higher than last month. Keep up your
-          good work!
+          {series[0] > 0
+            ? `${series[0]}% of students scored above 5 in the selected exam. Keep up the good work!`
+            : "No data available for the selected classroom and score type."}
         </p>
-      </div>
-
-      <div className="flex items-center justify-center gap-5 px-6 py-3.5 sm:gap-8 sm:py-5">
-        <div>
-          <p className="mb-1 text-center text-gray-500 text-theme-xs dark:text-gray-400 sm:text-sm">
-            Target
-          </p>
-          <p className="flex items-center justify-center gap-1 text-base font-semibold text-gray-800 dark:text-white/90 sm:text-lg">
-            $20K
-            <svg
-              width="16"
-              height="16"
-              viewBox="0 0 16 16"
-              fill="none"
-              xmlns="http://www.w3.org/2000/svg"
-            >
-              <path
-                fillRule="evenodd"
-                clipRule="evenodd"
-                d="M7.26816 13.6632C7.4056 13.8192 7.60686 13.9176 7.8311 13.9176C7.83148 13.9176 7.83187 13.9176 7.83226 13.9176C8.02445 13.9178 8.21671 13.8447 8.36339 13.6981L12.3635 9.70076C12.6565 9.40797 12.6567 8.9331 12.3639 8.6401C12.0711 8.34711 11.5962 8.34694 11.3032 8.63973L8.5811 11.36L8.5811 2.5C8.5811 2.08579 8.24531 1.75 7.8311 1.75C7.41688 1.75 7.0811 2.08579 7.0811 2.5L7.0811 11.3556L4.36354 8.63975C4.07055 8.34695 3.59568 8.3471 3.30288 8.64009C3.01008 8.93307 3.01023 9.40794 3.30321 9.70075L7.26816 13.6632Z"
-                fill="#D92D20"
-              />
-            </svg>
-          </p>
-        </div>
-
-        <div className="w-px bg-gray-200 h-7 dark:bg-gray-800"></div>
-
-        <div>
-          <p className="mb-1 text-center text-gray-500 text-theme-xs dark:text-gray-400 sm:text-sm">
-            Revenue
-          </p>
-          <p className="flex items-center justify-center gap-1 text-base font-semibold text-gray-800 dark:text-white/90 sm:text-lg">
-            $20K
-            <svg
-              width="16"
-              height="16"
-              viewBox="0 0 16 16"
-              fill="none"
-              xmlns="http://www.w3.org/2000/svg"
-            >
-              <path
-                fillRule="evenodd"
-                clipRule="evenodd"
-                d="M7.60141 2.33683C7.73885 2.18084 7.9401 2.08243 8.16435 2.08243C8.16475 2.08243 8.16516 2.08243 8.16556 2.08243C8.35773 2.08219 8.54998 2.15535 8.69664 2.30191L12.6968 6.29924C12.9898 6.59203 12.9899 7.0669 12.6971 7.3599C12.4044 7.6529 11.9295 7.65306 11.6365 7.36027L8.91435 4.64004L8.91435 13.5C8.91435 13.9142 8.57856 14.25 8.16435 14.25C7.75013 14.25 7.41435 13.9142 7.41435 13.5L7.41435 4.64442L4.69679 7.36025C4.4038 7.65305 3.92893 7.6529 3.63613 7.35992C3.34333 7.06693 3.34348 6.59206 3.63646 6.29926L7.60141 2.33683Z"
-                fill="#039855"
-              />
-            </svg>
-          </p>
-        </div>
-
-        <div className="w-px bg-gray-200 h-7 dark:bg-gray-800"></div>
-
-        <div>
-          <p className="mb-1 text-center text-gray-500 text-theme-xs dark:text-gray-400 sm:text-sm">
-            Today
-          </p>
-          <p className="flex items-center justify-center gap-1 text-base font-semibold text-gray-800 dark:text-white/90 sm:text-lg">
-            $20K
-            <svg
-              width="16"
-              height="16"
-              viewBox="0 0 16 16"
-              fill="none"
-              xmlns="http://www.w3.org/2000/svg"
-            >
-              <path
-                fillRule="evenodd"
-                clipRule="evenodd"
-                d="M7.60141 2.33683C7.73885 2.18084 7.9401 2.08243 8.16435 2.08243C8.16475 2.08243 8.16516 2.08243 8.16556 2.08243C8.35773 2.08219 8.54998 2.15535 8.69664 2.30191L12.6968 6.29924C12.9898 6.59203 12.9899 7.0669 12.6971 7.3599C12.4044 7.6529 11.9295 7.65306 11.6365 7.36027L8.91435 4.64004L8.91435 13.5C8.91435 13.9142 8.57856 14.25 8.16435 14.25C7.75013 14.25 7.41435 13.9142 7.41435 13.5L7.41435 4.64442L4.69679 7.36025C4.4038 7.65305 3.92893 7.6529 3.63613 7.35992C3.34333 7.06693 3.34348 6.59206 3.63646 6.29926L7.60141 2.33683Z"
-                fill="#039855"
-              />
-            </svg>
-          </p>
-        </div>
       </div>
     </div>
   );

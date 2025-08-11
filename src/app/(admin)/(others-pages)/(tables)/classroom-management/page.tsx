@@ -16,7 +16,7 @@ export default function ClassroomManagementTable() {
     <div>
       <PageBreadcrumb pageTitle="Management" />
       <div className="space-y-6">
-        <ComponentCard title="User Management Table">
+        <ComponentCard title="Classroom Management Table">
           <ClassroomManagement />
         </ComponentCard>
       </div>

@@ -131,7 +131,7 @@ export default function ClassroomManagement() {
     // Fetch subjects
     const fetchSubjects = async () => {
         try {
-            const response = await api.get<ApiResponse<Subject[]>>("/subjects");
+            const response = await api.get<ApiResponse<Subject[]>>("/classrooms/subjects");
             setSubjects(response.data.result || []);
         } catch (err) {
             addAlert("error", "Error", err instanceof Error ? err.message : "Failed to fetch subjects");

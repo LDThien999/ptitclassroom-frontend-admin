@@ -19,12 +19,16 @@ export interface UserResponse {
   password?: string;
 }
 
-interface ApiResponse {
-  result: {
-    items: UserResponse[];
-    cursor: number;
-    hasNext: boolean;
-  };
+interface UserPagingResponse<T> {
+  items: T[];
+  cursor: number;
+  hasNext: boolean;
+}
+
+interface ApiResponse<T> {
+  result: T;
+  message?: string;
+  code: number;
 }
 
 interface Alert {
@@ -36,6 +40,7 @@ interface Alert {
 
 export default function UserManagement() {
   const [users, setUsers] = useState<UserResponse[]>([]);
+  const [filteredUsers, setFilteredUsers] = useState<UserResponse[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [cursor, setCursor] = useState<number>(0);
@@ -43,37 +48,80 @@ export default function UserManagement() {
   const [hasNext, setHasNext] = useState<boolean>(true);
   const [selectedUser, setSelectedUser] = useState<UserResponse | null>(null);
   const [formData, setFormData] = useState<UserResponse | null>(null);
+  const [filterUsername, setFilterUsername] = useState<string>("");
+  const [filterRole, setFilterRole] = useState<string>("");
   const { isOpen, openModal, closeModal } = useModal();
   const [confirmDeleteUserId, setConfirmDeleteUserId] = useState<number | null>(null);
+  const pageSize = 20;
 
-  // alert management
+  // Alert management
   const addAlert = (type: "success" | "error", title: string, message: string) => {
     const id = Math.random().toString(36).substring(2);
     setAlerts((prev) => [...prev, { id, type, title, message }]);
+    setTimeout(() => {
+      removeAlert(id);
+    }, 5000);
   };
 
   const removeAlert = (id: string) => {
     setAlerts((prev) => prev.filter((alert) => alert.id !== id));
   };
 
-  const fetchUsers = async (cursor: number, page: number) => {
+  // Fetch users with username filter
+  const fetchUsers = async (cursor: number, page: number, username: string) => {
     try {
       setLoading(true);
-      console.log("token", Cookies.get("token"));
-      const response = await api.get<ApiResponse>("/identity/users/get-list-users", {
-        params: { cursor, page },
+      const queryParams = new URLSearchParams({
+        cursor: cursor.toString(),
+        page: page.toString(),
+        size: pageSize.toString(),
       });
+      if (username) {
+        queryParams.append("username", username);
+      }
 
-      setUsers(response.data.result.items || []);
-      setHasNext(response.data.result.hasNext || false);
-      setCursor(response.data.result.cursor || cursor);
+      const response = await api.get<ApiResponse<UserPagingResponse<UserResponse>>>(
+        `/identity/users/get-list-users?${queryParams.toString()}`
+      );
+
+      const result = response.data.result;
+      setUsers(result.items || []);
+      setHasNext(result.hasNext || false);
+      setCursor(result.cursor || cursor);
     } catch (err) {
-      addAlert("error", "Error", err instanceof Error ? err.message : "An error occurred");
+      addAlert("error", "Error", err instanceof Error ? err.message : "An error occurred while fetching users");
     } finally {
       setLoading(false);
     }
   };
 
+  // Handle username filter change
+  const handleFilterUsernameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setFilterUsername(e.target.value);
+  };
+
+  // Handle role filter change
+  const handleFilterRoleChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    setFilterRole(e.target.value);
+  };
+
+  // Handle search button click
+  const handleSearch = () => {
+    setPage(0);
+    setCursor(0);
+    fetchUsers(0, 0, filterUsername);
+  };
+
+  // Apply role filter on client-side
+  useEffect(() => {
+    if (filterRole) {
+      setFilteredUsers(users.filter((user) => user.roles === filterRole));
+    } else {
+      setFilteredUsers(users);
+    }
+  }, [users, filterRole]);
+
+  // Handle edit user
   const handleEdit = (userId: number) => {
     const user = users.find((u) => u.userId === userId);
     if (user) {
@@ -83,6 +131,7 @@ export default function UserManagement() {
     }
   };
 
+  // Handle create user
   const handleCreate = () => {
     setSelectedUser(null);
     setFormData({
@@ -98,11 +147,13 @@ export default function UserManagement() {
     openModal();
   };
 
+  // Handle form input changes
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
     setFormData((prev) => (prev ? { ...prev, [name]: value } : prev));
   };
 
+  // Handle save (create or update)
   const handleSave = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!formData) return;
@@ -115,13 +166,13 @@ export default function UserManagement() {
 
     try {
       if (selectedUser) {
-        // Update user: Prepare request body matching UpdateUserRequest
+        // Update user
         const updateRequest = {
           userId: formData.userId,
           username: formData.username,
           fullName: formData.fullName,
           email: formData.email,
-          dob: formData.dob, // Already in YYYY-MM-DD format
+          dob: formData.dob,
           roles: formData.roles,
         };
         await api.post("/profile/users/update", updateRequest);
@@ -137,22 +188,23 @@ export default function UserManagement() {
         setUsers([...users, { ...response.data, userId: Math.max(...users.map((u) => u.userId), 0) + 1 }]);
         addAlert("success", "Success", "User created successfully");
       }
-      console.log(`${selectedUser ? "Updated" : "Created"} user:`, formData);
       closeModal();
+      handleSearch(); // Refresh user list after save
     } catch (err) {
       addAlert("error", "Error", err instanceof Error ? err.message : "Failed to save user");
     }
   };
 
+  // Confirm delete
   const confirmDelete = (userId: number) => {
     setConfirmDeleteUserId(userId);
   };
 
+  // Handle delete
   const handleConfirmDelete = async () => {
     if (confirmDeleteUserId === null) return;
 
     try {
-      console.log("Confirm delete user:", confirmDeleteUserId);
       const response = await api.post(`/identity/users/delete/${confirmDeleteUserId}`);
       if (response.data.code !== 200) {
         addAlert("error", "Error", "Failed to delete user");
@@ -161,23 +213,28 @@ export default function UserManagement() {
       setUsers(users.filter((u) => u.userId !== confirmDeleteUserId));
       setConfirmDeleteUserId(null);
       addAlert("success", "Success", "User deleted successfully");
+      handleSearch(); // Refresh user list after delete
     } catch (err) {
       addAlert("error", "Error", err instanceof Error ? err.message : "Failed to delete user");
     }
   };
 
+  // Cancel delete
   const handleCancelDelete = () => {
     setConfirmDeleteUserId(null);
   };
 
+  // Fetch users on mount
   useEffect(() => {
-    fetchUsers(cursor, page);
-  }, [cursor, page]);
+    fetchUsers(cursor, page, filterUsername);
+  }, []);
 
+  // Handle pagination
   const handleNextPage = () => {
     if (hasNext) {
       setPage((prev) => prev + 1);
       setCursor((prev) => prev + 1);
+      fetchUsers(cursor + 1, page + 1, filterUsername);
     }
   };
 
@@ -185,11 +242,9 @@ export default function UserManagement() {
     if (page > 0) {
       setPage((prev) => prev - 1);
       setCursor((prev) => prev - 1);
+      fetchUsers(cursor - 1, page - 1, filterUsername);
     }
   };
-
-  if (loading) return <div>Loading...</div>;
-  if (users.length === 0 && !alerts.length) return <div>No users found</div>;
 
   return (
     <div className="relative">
@@ -206,6 +261,34 @@ export default function UserManagement() {
         />
       ))}
 
+      {/* Filters and Search Button */}
+      <div className="flex gap-4 mb-4">
+        <input
+          type="text"
+          placeholder="Filter by Username"
+          value={filterUsername}
+          onChange={handleFilterUsernameChange}
+          className="w-full max-w-xs rounded-md border border-gray-300 dark:border-gray-600 p-2 text-sm text-gray-800 dark:text-white dark:bg-gray-700"
+        />
+        <select
+          value={filterRole}
+          onChange={handleFilterRoleChange}
+          className="w-full max-w-xs rounded-md border border-gray-300 dark:border-gray-600 p-2 text-sm text-gray-800 dark:text-white dark:bg-gray-700"
+        >
+          <option value="">All Roles</option>
+          <option value="STUDENT">Student</option>
+          <option value="TEACHER">Teacher</option>
+          <option value="ADMIN">Admin</option>
+        </select>
+        <Button
+          size="sm"
+          onClick={handleSearch}
+          className="px-4 py-2 rounded-md text-sm font-medium text-white bg-blue-500 hover:bg-blue-600 transition-colors"
+        >
+          Search
+        </Button>
+      </div>
+
       <div className="flex justify-end mb-4">
         <Button
           size="sm"
@@ -216,15 +299,25 @@ export default function UserManagement() {
         </Button>
       </div>
 
-      <UserTable
-        users={users}
-        handleEdit={handleEdit}
-        confirmDelete={confirmDelete}
-        handleNextPage={handleNextPage}
-        handlePrevPage={handlePrevPage}
-        page={page}
-        hasNext={hasNext}
-      />
+      {loading ? (
+        <div>Loading...</div>
+      ) : (
+        <>
+          {filteredUsers.length === 0 ? (
+            <div className="text-center text-sm text-gray-800 dark:text-white">No users found</div>
+          ) : (
+            <UserTable
+              users={filteredUsers}
+              handleEdit={handleEdit}
+              confirmDelete={confirmDelete}
+              handleNextPage={handleNextPage}
+              handlePrevPage={handlePrevPage}
+              page={page}
+              hasNext={hasNext}
+            />
+          )}
+        </>
+      )}
 
       {/* Delete Confirmation Alert */}
       {confirmDeleteUserId !== null && (

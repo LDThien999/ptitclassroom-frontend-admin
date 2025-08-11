@@ -21,16 +21,16 @@ export default function AuthLayout({
               {/* <!-- ===== Common Grid Shape Start ===== --> */}
               <GridShape />
               <div className="flex flex-col items-center max-w-xs">
-                <Link href="/" className="block mb-4">
+                <Link href="/dashboard" className="block mb-4">
                   <Image
                     width={231}
                     height={48}
-                    src="./images/logo/auth-logo.svg"
+                    src="/images/logo/ptitLogo.png"
                     alt="Logo"
                   />
                 </Link>
                 <p className="text-center text-gray-400 dark:text-white/60">
-                  Free and Open-Source Tailwind CSS Admin Dashboard Template
+                  Welcome to PTIT Classroom, your hub for academic excellence and community engagement. Join us in shaping the future of education.
                 </p>
               </div>
             </div>

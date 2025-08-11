@@ -11,6 +11,8 @@ import debounce from "lodash/debounce";
 interface Classroom {
     classroomId: string;
     total: number;
+    subjectId: number;
+    subjectName: string;
 }
 
 interface ClassroomPagingResponse {
@@ -62,7 +64,7 @@ interface ScoreTableProps {
 interface ScoreModalProps {
     isOpen: boolean;
     onClose: () => void;
-    classroomId: string;
+    classroom: Classroom;
     addAlert: (type: "success" | "error", title: string, message: string) => void;
 }
 
@@ -71,7 +73,12 @@ const ScoreTable: React.FC<ScoreTableProps> = ({ filteredScores, handleSave, con
     const [editFormData, setEditFormData] = useState<Partial<ScoreCreateRequest>>({});
     const [sortColumn, setSortColumn] = useState<keyof ScoreResponse | null>(null);
     const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
+    const [sortedScores, setSortedScores] = useState<ScoreResponse[]>(filteredScores);
     const scoreTypes = ["REGULAR", "MIDTERM", "FINAL"];
+
+    useEffect(() => {
+        setSortedScores(filteredScores);
+    }, [filteredScores]);
 
     // Handle sorting
     const handleSort = (column: keyof ScoreResponse) => {
@@ -79,12 +86,11 @@ const ScoreTable: React.FC<ScoreTableProps> = ({ filteredScores, handleSave, con
         setSortColumn(column);
         setSortDirection(newDirection);
         const sorted = sortData(filteredScores, column, newDirection);
-        handleSaveSort(sorted);
+        setSortedScores(sorted);
     };
 
     // Sort data function
-    const sortData = (data: ScoreResponse[], column: keyof ScoreResponse | null, direction: "asc" | "desc") => {
-        if (!column) return data;
+    const sortData = (data: ScoreResponse[], column: keyof ScoreResponse, direction: "asc" | "desc") => {
         return [...data].sort((a, b) => {
             const valueA = a[column];
             const valueB = b[column];
@@ -93,13 +99,8 @@ const ScoreTable: React.FC<ScoreTableProps> = ({ filteredScores, handleSave, con
             }
             const strA = String(valueA).toLowerCase();
             const strB = String(valueB).toLowerCase();
-            return direction === "asc" ? strA.localeCompare(strB) : strB.localeCompare(strB);
+            return direction === "asc" ? strA.localeCompare(strB) : strB.localeCompare(strA);
         });
-    };
-
-    // Placeholder for saving sorted data
-    const handleSaveSort = (sortedData: ScoreResponse[]) => {
-        // No-op for now, as sorting is local
     };
 
     // Start editing a score
@@ -146,34 +147,34 @@ const ScoreTable: React.FC<ScoreTableProps> = ({ filteredScores, handleSave, con
                                 className="border border-gray-300 dark:border-gray-600 px-4 py-2 text-left text-sm font-medium text-gray-800 dark:text-white w-[150px] cursor-pointer"
                                 onClick={() => handleSort("score")}
                             >
-                                Điểm {sortColumn === "score" && (sortDirection === "asc" ? "↑" : "↓")}
+                                Score {sortColumn === "score" && (sortDirection === "asc" ? "↑" : "↓")}
                             </th>
                             <th
                                 className="border border-gray-300 dark:border-gray-600 px-4 py-2 text-left text-sm font-medium text-gray-800 dark:text-white w-[200px] cursor-pointer"
                                 onClick={() => handleSort("studentId")}
                             >
-                                Mã học sinh {sortColumn === "studentId" && (sortDirection === "asc" ? "↑" : "↓")}
+                                Student ID {sortColumn === "studentId" && (sortDirection === "asc" ? "↑" : "↓")}
                             </th>
                             <th
                                 className="border border-gray-300 dark:border-gray-600 px-4 py-2 text-left text-sm font-medium text-gray-800 dark:text-white w-[200px] cursor-pointer"
                                 onClick={() => handleSort("typeofscore")}
                             >
-                                Loại điểm {sortColumn === "typeofscore" && (sortDirection === "asc" ? "↑" : "↓")}
+                                Type Of Score {sortColumn === "typeofscore" && (sortDirection === "asc" ? "↑" : "↓")}
                             </th>
                             <th className="border border-gray-300 dark:border-gray-600 px-4 py-2 text-left text-sm font-medium text-gray-800 dark:text-white w-[200px]">
-                                Hành động
+                                Action
                             </th>
                         </tr>
                     </thead>
                     <tbody>
-                        {filteredScores.length === 0 ? (
+                        {sortedScores.length === 0 ? (
                             <tr>
                                 <td colSpan={4} className="border border-gray-300 dark:border-gray-600 px-4 py-1.5 text-sm text-gray-800 dark:text-white text-center">
-                                    Không tìm thấy điểm nào
+                                    Can not find any scores!
                                 </td>
                             </tr>
                         ) : (
-                            filteredScores.map((score) => (
+                            sortedScores.map((score) => (
                                 <tr key={score.scoreDetailId} className="hover:bg-gray-50 dark:hover:bg-gray-700">
                                     <td className="border border-gray-300 dark:border-gray-600 px-4 py-1.5 text-sm text-gray-800 dark:text-white">
                                         {editingScoreId === score.scoreDetailId ? (
@@ -213,37 +214,39 @@ const ScoreTable: React.FC<ScoreTableProps> = ({ filteredScores, handleSave, con
                                         )}
                                     </td>
                                     <td className="border border-gray-300 dark:border-gray-600 px-4 py-1.5 text-sm text-gray-800 dark:text-white">
-                                        {editingScoreId === score.scoreDetailId ? (
-                                            <>
-                                                <button
-                                                    onClick={() => handleEditSave(score.scoreDetailId)}
-                                                    className="mr-2 text-green-500 hover:text-green-700"
-                                                >
-                                                    Lưu
-                                                </button>
-                                                <button
-                                                    onClick={handleEditCancel}
-                                                    className="text-gray-500 hover:text-gray-700"
-                                                >
-                                                    Hủy
-                                                </button>
-                                            </>
-                                        ) : (
-                                            <>
-                                                <button
-                                                    onClick={() => handleEditStart(score)}
-                                                    className="mr-2 text-blue-500 hover:text-blue-700"
-                                                >
-                                                    Sửa
-                                                </button>
-                                                <button
-                                                    onClick={() => confirmDelete(score.scoreDetailId)}
-                                                    className="text-red-500 hover:text-red-700"
-                                                >
-                                                    Xóa
-                                                </button>
-                                            </>
-                                        )}
+                                        {score.typeofscore !== "AVERAGE" ? (
+                                            editingScoreId === score.scoreDetailId ? (
+                                                <>
+                                                    <button
+                                                        onClick={() => handleEditSave(score.scoreDetailId)}
+                                                        className="mr-2 text-green-500 hover:text-green-700"
+                                                    >
+                                                        Lưu
+                                                    </button>
+                                                    <button
+                                                        onClick={handleEditCancel}
+                                                        className="text-gray-500 hover:text-gray-700"
+                                                    >
+                                                        Hủy
+                                                    </button>
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <button
+                                                        onClick={() => handleEditStart(score)}
+                                                        className="mr-2 text-blue-500 hover:text-blue-700"
+                                                    >
+                                                        Edit
+                                                    </button>
+                                                    <button
+                                                        onClick={() => confirmDelete(score.scoreDetailId)}
+                                                        className="text-red-500 hover:text-red-700"
+                                                    >
+                                                        Delete
+                                                    </button>
+                                                </>
+                                            )
+                                        ) : null}
                                     </td>
                                 </tr>
                             ))
@@ -255,13 +258,14 @@ const ScoreTable: React.FC<ScoreTableProps> = ({ filteredScores, handleSave, con
     );
 };
 
-const ScoreModal: React.FC<ScoreModalProps> = ({ isOpen, onClose, classroomId, addAlert }) => {
+const ScoreModal: React.FC<ScoreModalProps> = ({ isOpen, onClose, classroom, addAlert }) => {
     const [scores, setScores] = useState<ScoreResponse[]>([]);
     const [filteredScores, setFilteredScores] = useState<ScoreResponse[]>([]);
     const [cursor, setCursor] = useState<number>(0);
     const [hasNext, setHasNext] = useState<boolean>(true);
     const [loading, setLoading] = useState<boolean>(false);
     const [filterStudentId, setFilterStudentId] = useState<number | string>("");
+    const [filterScoreType, setFilterScoreType] = useState<string>("ALL");
     const [formData, setFormData] = useState<ScoreCreateRequest | null>(null);
     const [confirmDeleteScoreId, setConfirmDeleteScoreId] = useState<number | null>(null);
     const { isOpen: isFormOpen, openModal: openFormModal, closeModal: closeFormModal } = useModal();
@@ -273,7 +277,7 @@ const ScoreModal: React.FC<ScoreModalProps> = ({ isOpen, onClose, classroomId, a
         debounce((newCursor: number, studentId: number) => {
             fetchScores(newCursor, studentId);
         }, 300),
-        [classroomId]
+        [classroom.classroomId]
     );
 
     // Fetch scores with optional studentId filter
@@ -284,7 +288,7 @@ const ScoreModal: React.FC<ScoreModalProps> = ({ isOpen, onClose, classroomId, a
                 cursor: newCursor.toString(),
                 page: "0",
                 size: pageSize.toString(),
-                classroomId,
+                classroomId: classroom.classroomId,
             });
             if (studentId !== -999) {
                 queryParams.append("studentId", studentId.toString());
@@ -295,24 +299,65 @@ const ScoreModal: React.FC<ScoreModalProps> = ({ isOpen, onClose, classroomId, a
             const { items, nextCursor, hasNext } = response.data.result || { items: [], nextCursor: 0, hasNext: false };
             if (Array.isArray(items)) {
                 setScores(items);
-                setFilteredScores(items);
                 setCursor(nextCursor);
                 setHasNext(hasNext);
             } else {
                 setScores([]);
-                setFilteredScores([]);
                 setHasNext(false);
-                addAlert("error", "Lỗi", "Dữ liệu điểm không hợp lệ từ server");
+                addAlert("error", "Error", "Data is not valid from server");
             }
         } catch (err) {
             setScores([]);
-            setFilteredScores([]);
             setHasNext(false);
-            addAlert("error", "Lỗi", err instanceof Error ? err.message : "Không thể tải danh sách điểm");
+            addAlert("error", "Error", err instanceof Error ? err.message : "Can not get list scores");
         } finally {
             setLoading(false);
         }
     };
+
+    // Calculate averages
+    const calculateAverages = (): ScoreResponse[] => {
+        const studentScores = new Map<number, { regular: number[]; midterm: number[]; final: number[] }>();
+        scores.forEach((score) => {
+            if (!studentScores.has(score.studentId)) {
+                studentScores.set(score.studentId, { regular: [], midterm: [], final: [] });
+            }
+            const group = studentScores.get(score.studentId)!;
+            if (score.typeofscore === "REGULAR") group.regular.push(score.score);
+            else if (score.typeofscore === "MIDTERM") group.midterm.push(score.score);
+            else if (score.typeofscore === "FINAL") group.final.push(score.score);
+        });
+
+        const averages: ScoreResponse[] = [];
+        let fakeId = -1;
+        studentScores.forEach((groups, studentId) => {
+            const avgReg = groups.regular.length > 0 ? groups.regular.reduce((a, b) => a + b, 0) / groups.regular.length : 0;
+            const avgMid = groups.midterm.length > 0 ? groups.midterm.reduce((a, b) => a + b, 0) / groups.midterm.length : 0;
+            const avgFin = groups.final.length > 0 ? groups.final.reduce((a, b) => a + b, 0) / groups.final.length : 0;
+            const avg = avgReg * 0.1 + avgMid * 0.3 + avgFin * 0.6;
+            averages.push({
+                scoreDetailId: fakeId--,
+                score: avg,
+                studentId,
+                classroomId: classroom.classroomId,
+                typeofscore: "AVERAGE",
+            });
+        });
+        return averages;
+    };
+
+    // Update filtered scores based on filters
+    useEffect(() => {
+        let temp = scores;
+        if (filterScoreType === "AVERAGE") {
+            setFilteredScores(calculateAverages());
+        } else {
+            if (filterScoreType !== "ALL") {
+                temp = temp.filter((s) => s.typeofscore === filterScoreType);
+            }
+            setFilteredScores(temp);
+        }
+    }, [scores, filterScoreType]);
 
     // Handle student ID filter
     const handleFilterChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -324,12 +369,17 @@ const ScoreModal: React.FC<ScoreModalProps> = ({ isOpen, onClose, classroomId, a
         }
     };
 
+    // Handle score type filter
+    const handleScoreTypeFilterChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+        setFilterScoreType(e.target.value);
+    };
+
     // Load scores when modal opens
     useEffect(() => {
         if (isOpen) {
             fetchScores(0, filterStudentId === "" ? -999 : parseInt(String(filterStudentId)));
         }
-    }, [isOpen, classroomId]);
+    }, [isOpen, classroom.classroomId]);
 
     // Handle pagination
     const handleNextPage = () => {
@@ -355,7 +405,7 @@ const ScoreModal: React.FC<ScoreModalProps> = ({ isOpen, onClose, classroomId, a
         setFormData({
             score: 0,
             studentId: 0,
-            classroomId,
+            classroomId: classroom.classroomId,
             typeofscore: "REGULAR",
         });
         openFormModal();
@@ -377,33 +427,32 @@ const ScoreModal: React.FC<ScoreModalProps> = ({ isOpen, onClose, classroomId, a
     const handleSaveNew = async (e: FormEvent<HTMLFormElement>) => {
         e.preventDefault();
         if (!formData) {
-            addAlert("error", "Lỗi", "Dữ liệu form không tồn tại");
+            addAlert("error", "Error", "Dữ liệu form không tồn tại");
             return;
         }
 
         const form = e.currentTarget;
         if (!form.checkValidity() || isNaN(formData.studentId) || formData.studentId <= 0) {
             form.reportValidity();
-            addAlert("error", "Lỗi", "Vui lòng điền đầy đủ các trường bắt buộc và mã học sinh hợp lệ");
+            addAlert("error", "Error", "Please fill in all required fields correctly");
             return;
         }
 
         try {
             const response = await api.post<ApiResponse<ScoreResponse>>("/score/create", formData);
             if (response.data.code !== 0) {
-                addAlert("error", "Lỗi", response.data.message || "Không thể tạo điểm");
+                addAlert("error", "Error", response.data.message || "Can not create score");
                 return;
             }
-            setScores([...scores, { ...response.data.result, scoreDetailId: Math.max(...scores.map((s) => s.scoreDetailId), 0) + 1 }]);
-            setFilteredScores([...scores, { ...response.data.result, scoreDetailId: Math.max(...scores.map((s) => s.scoreDetailId), 0) + 1 }]);
-            addAlert("success", "Thành công", "Tạo điểm thành công");
+            setScores([...scores, response.data.result]);
+            addAlert("success", "Thành công", "Create score successfully");
             closeFormModal();
             const studentId = filterStudentId === "" ? -999 : parseInt(String(filterStudentId));
             if (!isNaN(studentId)) {
                 fetchScores(cursor, studentId);
             }
         } catch (err) {
-            addAlert("error", "Lỗi", err instanceof Error ? err.message : "Không thể lưu điểm");
+            addAlert("error", "Error", err instanceof Error ? err.message : "Can not create score");
         }
     };
 
@@ -416,18 +465,13 @@ const ScoreModal: React.FC<ScoreModalProps> = ({ isOpen, onClose, classroomId, a
                     s.scoreDetailId === scoreDetailId ? { ...s, ...updatedData } : s
                 )
             );
-            setFilteredScores(
-                filteredScores.map((s) =>
-                    s.scoreDetailId === scoreDetailId ? { ...s, ...updatedData } : s
-                )
-            );
-            addAlert("success", "Thành công", "Cập nhật điểm thành công");
+            addAlert("success", "Success", "Update score successfully");
             const studentId = filterStudentId === "" ? -999 : parseInt(String(filterStudentId));
             if (!isNaN(studentId)) {
                 fetchScores(cursor, studentId);
             }
         } catch (err) {
-            addAlert("error", "Lỗi", err instanceof Error ? err.message : "Không thể lưu điểm");
+            addAlert("error", "Error", err instanceof Error ? err.message : "Can not update score");
         }
     };
 
@@ -443,19 +487,18 @@ const ScoreModal: React.FC<ScoreModalProps> = ({ isOpen, onClose, classroomId, a
         try {
             const response = await api.delete(`/score/delete?scoreDetailId=${confirmDeleteScoreId}`);
             if (response.data.code !== 0) {
-                addAlert("error", "Lỗi", "Không thể xóa điểm");
+                addAlert("error", "Error", "Could not delete score: " + response.data.message);
                 return;
             }
             setScores(scores.filter((s) => s.scoreDetailId !== confirmDeleteScoreId));
-            setFilteredScores(filteredScores.filter((s) => s.scoreDetailId !== confirmDeleteScoreId));
             setConfirmDeleteScoreId(null);
-            addAlert("success", "Thành công", "Xóa điểm thành công");
+            addAlert("success", "Success", "Delete score successfully");
             const studentId = filterStudentId === "" ? -999 : parseInt(String(filterStudentId));
             if (!isNaN(studentId)) {
                 fetchScores(cursor, studentId);
             }
         } catch (err) {
-            addAlert("error", "Lỗi", err instanceof Error ? err.message : "Không thể xóa điểm");
+            addAlert("error", "Error", err instanceof Error ? err.message : "Không thể xóa điểm");
         }
     };
 
@@ -472,7 +515,7 @@ const ScoreModal: React.FC<ScoreModalProps> = ({ isOpen, onClose, classroomId, a
         >
             <div className="top-0 bg-white dark:bg-gray-900 z-10 pb-4">
                 <h4 className="font-semibold text-gray-800 text-title-sm dark:text-white/90">
-                    Classroom: {classroomId}
+                    ClassroomID: {classroom.classroomId} - Subject {classroom.subjectId}: {classroom.subjectName}
                 </h4>
             </div>
             <div className="flex justify-end mb-4">
@@ -481,20 +524,31 @@ const ScoreModal: React.FC<ScoreModalProps> = ({ isOpen, onClose, classroomId, a
                     onClick={handleCreate}
                     className="px-4 py-2 rounded-md text-sm font-medium text-white bg-blue-500 hover:bg-blue-600 transition-colors"
                 >
-                    Tạo điểm mới
+                    New Score Record
                 </Button>
             </div>
-            <div className="mb-4">
+            <div className="mb-4 flex gap-4">
                 <input
                     type="number"
-                    placeholder="Lọc theo mã học sinh"
+                    placeholder="Filter by Student ID"
                     value={filterStudentId}
                     onChange={handleFilterChange}
                     className="w-full max-w-xs rounded-md border border-gray-300 dark:border-gray-600 p-2 text-sm text-gray-800 dark:text-white dark:bg-gray-700"
                 />
+                <select
+                    value={filterScoreType}
+                    onChange={handleScoreTypeFilterChange}
+                    className="w-full max-w-xs rounded-md border border-gray-300 dark:border-gray-600 p-2 text-sm text-gray-800 dark:text-white dark:bg-gray-700"
+                >
+                    <option value="ALL">All</option>
+                    <option value="REGULAR">REGULAR</option>
+                    <option value="MIDTERM">MIDTERM</option>
+                    <option value="FINAL">FINAL</option>
+                    <option value="AVERAGE">AVERAGE</option>
+                </select>
             </div>
             {loading ? (
-                <div>Đang tải...</div>
+                <div>Loading...</div>
             ) : (
                 <>
                     <ScoreTable
@@ -509,7 +563,7 @@ const ScoreModal: React.FC<ScoreModalProps> = ({ isOpen, onClose, classroomId, a
                             disabled={cursor === 0}
                             className="px-4 py-2 rounded-md text-sm font-medium text-white bg-gray-500 hover:bg-gray-600 transition-colors disabled:bg-gray-300"
                         >
-                            Trang trước
+                            Previous Page
                         </Button>
                         <Button
                             size="sm"
@@ -517,7 +571,7 @@ const ScoreModal: React.FC<ScoreModalProps> = ({ isOpen, onClose, classroomId, a
                             disabled={!hasNext}
                             className="px-4 py-2 rounded-md text-sm font-medium text-white bg-blue-500 hover:bg-blue-600 transition-colors disabled:bg-gray-300"
                         >
-                            Trang sau
+                            Next Page
                         </Button>
                     </div>
                 </>
@@ -528,7 +582,7 @@ const ScoreModal: React.FC<ScoreModalProps> = ({ isOpen, onClose, classroomId, a
                     title="Xác nhận xóa"
                     message={
                         <>
-                            Bạn có chắc chắn muốn xóa điểm này? Hành động này không thể hoàn tác.
+                            Are you sure you want to delete this score? This action cannot be undone.
                             <div className="flex justify-end gap-2 mt-4">
                                 <button
                                     onClick={handleCancelDelete}
@@ -560,11 +614,11 @@ const ScoreModal: React.FC<ScoreModalProps> = ({ isOpen, onClose, classroomId, a
                     className="w-[95vw] max-w-[600px] p-5"
                 >
                     <h4 className="font-semibold text-gray-800 mb-7 text-title-sm dark:text-white/90">
-                        Tạo điểm mới
+                        New Score Record
                     </h4>
                     <form onSubmit={handleSaveNew}>
                         <div className="mb-4">
-                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Điểm</label>
+                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Score</label>
                             <input
                                 type="number"
                                 name="score"
@@ -578,7 +632,7 @@ const ScoreModal: React.FC<ScoreModalProps> = ({ isOpen, onClose, classroomId, a
                             />
                         </div>
                         <div className="mb-4">
-                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Mã học sinh</label>
+                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Student ID</label>
                             <input
                                 type="number"
                                 name="studentId"
@@ -589,7 +643,7 @@ const ScoreModal: React.FC<ScoreModalProps> = ({ isOpen, onClose, classroomId, a
                             />
                         </div>
                         <div className="mb-4">
-                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Loại điểm</label>
+                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Type Of Score</label>
                             <select
                                 name="typeofscore"
                                 value={formData.typeofscore}
@@ -606,10 +660,10 @@ const ScoreModal: React.FC<ScoreModalProps> = ({ isOpen, onClose, classroomId, a
                         </div>
                         <div className="flex items-center justify-end w-full gap-3 mt-8">
                             <Button type="button" size="sm" variant="outline" onClick={closeFormModal}>
-                                Hủy
+                                Cancel
                             </Button>
                             <Button type="submit" size="sm">
-                                Lưu
+                                Save
                             </Button>
                         </div>
                     </form>
@@ -626,7 +680,7 @@ export default function ScoreManagement() {
     const [loading, setLoading] = useState<boolean>(false);
     const [filterClassroomId, setFilterClassroomId] = useState<string>("");
     const [alerts, setAlerts] = useState<Alert[]>([]);
-    const [selectedClassroomId, setSelectedClassroomId] = useState<string | null>(null);
+    const [selectedClassroom, setSelectedClassroom] = useState<Classroom | null>(null);
     const { isOpen, openModal, closeModal } = useModal();
     const pageSize = 15;
 
@@ -672,12 +726,12 @@ export default function ScoreManagement() {
             } else {
                 setClassrooms([]);
                 setHasNext(false);
-                addAlert("error", "Lỗi", "Dữ liệu lớp học không hợp lệ từ server");
+                addAlert("error", "Error", "Dữ liệu lớp học không hợp lệ từ server");
             }
         } catch (err) {
             setClassrooms([]);
             setHasNext(false);
-            addAlert("error", "Lỗi", err instanceof Error ? err.message : "Không thể tải danh sách lớp học");
+            addAlert("error", "Error", err instanceof Error ? err.message : "Không thể tải danh sách lớp học");
         } finally {
             setLoading(false);
         }
@@ -709,8 +763,8 @@ export default function ScoreManagement() {
     };
 
     // Handle classroom selection
-    const handleSelectClassroom = (classroomId: string) => {
-        setSelectedClassroomId(classroomId);
+    const handleSelectClassroom = (classroom: Classroom) => {
+        setSelectedClassroom(classroom);
         openModal();
     };
 
@@ -733,7 +787,7 @@ export default function ScoreManagement() {
             <div className="mb-4">
                 <input
                     type="text"
-                    placeholder="Lọc theo mã lớp học"
+                    placeholder="Filter by Classroom ID"
                     value={filterClassroomId}
                     onChange={handleFilterChange}
                     className="w-full max-w-xs rounded-md border border-gray-300 dark:border-gray-600 p-2 text-sm text-gray-800 dark:text-white dark:bg-gray-700"
@@ -749,14 +803,16 @@ export default function ScoreManagement() {
                         <table className="w-full border-collapse border border-gray-300 dark:border-gray-600">
                             <thead>
                                 <tr className="bg-gray-100 dark:bg-gray-800">
-                                    <th className="border border-gray-300 dark:border-gray-600 px-4 py-2 text-left text-sm font-medium text-gray-800 dark:text-white">Mã lớp học</th>
-                                    <th className="border border-gray-300 dark:border-gray-600 px-4 py-2 text-left text-sm font-medium text-gray-800 dark:text-white">Số lượng học sinh</th>
+                                    <th className="border border-gray-300 dark:border-gray-600 px-4 py-2 text-left text-sm font-medium text-gray-800 dark:text-white">Classroom ID</th>
+                                    <th className="border border-gray-300 dark:border-gray-600 px-4 py-2 text-left text-sm font-medium text-gray-800 dark:text-white">Number Of Members</th>
+                                    <th className="border border-gray-300 dark:border-gray-600 px-4 py-2 text-left text-sm font-medium text-gray-800 dark:text-white">Subject ID</th>
+                                    <th className="border border-gray-300 dark:border-gray-600 px-4 py-2 text-left text-sm font-medium text-gray-800 dark:text-white">Subject Name</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 {classrooms.length === 0 ? (
                                     <tr>
-                                        <td colSpan={2} className="border border-gray-300 dark:border-gray-600 px-4 py-2 text-sm text-gray-800 dark:text-white text-center">
+                                        <td colSpan={4} className="border border-gray-300 dark:border-gray-600 px-4 py-2 text-sm text-gray-800 dark:text-white text-center">
                                             Không tìm thấy lớp học nào
                                         </td>
                                     </tr>
@@ -765,10 +821,12 @@ export default function ScoreManagement() {
                                         <tr
                                             key={classroom.classroomId}
                                             className="hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer"
-                                            onClick={() => handleSelectClassroom(classroom.classroomId)}
+                                            onClick={() => handleSelectClassroom(classroom)}
                                         >
                                             <td className="border border-gray-300 dark:border-gray-600 px-4 py-2 text-sm text-gray-800 dark:text-white">{classroom.classroomId}</td>
                                             <td className="border border-gray-300 dark:border-gray-600 px-4 py-2 text-sm text-gray-800 dark:text-white">{classroom.total}</td>
+                                            <td className="border border-gray-300 dark:border-gray-600 px-4 py-2 text-sm text-gray-800 dark:text-white">{classroom.subjectId}</td>
+                                            <td className="border border-gray-300 dark:border-gray-600 px-4 py-2 text-sm text-gray-800 dark:text-white">{classroom.subjectName}</td>
                                         </tr>
                                     ))
                                 )}
@@ -799,11 +857,11 @@ export default function ScoreManagement() {
             )}
 
             {/* Score modal */}
-            {selectedClassroomId && (
+            {selectedClassroom && (
                 <ScoreModal
                     isOpen={isOpen}
                     onClose={closeModal}
-                    classroomId={selectedClassroomId}
+                    classroom={selectedClassroom}
                     addAlert={addAlert}
                 />
             )}

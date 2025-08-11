@@ -26,7 +26,7 @@ export default function Ecommerce() {
         <MonthlyTarget />
       </div>
 
-      <div className="col-span-12">
+      {/* <div className="col-span-12">
         <StatisticsChart />
       </div>
 
@@ -36,7 +36,7 @@ export default function Ecommerce() {
 
       <div className="col-span-12 xl:col-span-7">
         <RecentOrders />
-      </div>
+      </div> */}
     </div>
   );
 }
