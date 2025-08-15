@@ -219,7 +219,7 @@ export default function ClassroomManagement() {
         try {
             if (selectedClassroom) {
                 // Update classroom
-                await api.post(`/classrooms/update/${selectedClassroom.id}`, formData);
+                await api.put(`/classrooms/${selectedClassroom.id}`, formData);
                 setClassrooms(
                     classrooms.map((c) =>
                         c.id === selectedClassroom.id ? { ...c, ...formData, classCode: c.classCode, createdAt: c.createdAt } : c
@@ -254,8 +254,8 @@ export default function ClassroomManagement() {
 
         try {
             console.log("Confirm delete classroom:", confirmDeleteClassroomId);
-            const response = await api.post(`/classrooms/delete/${confirmDeleteClassroomId}`);
-            if (response.data.code !== 200) {
+            const response = await api.delete(`/classrooms/${confirmDeleteClassroomId}`);
+            if (response.data.code !== 0) {
                 addAlert("error", "Error", "Failed to delete classroom");
                 return;
             }

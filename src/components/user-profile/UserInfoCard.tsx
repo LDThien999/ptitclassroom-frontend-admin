@@ -280,6 +280,7 @@ export default function UserInfoCard() {
                           value={formData.username}
                           onChange={handleChange}
                           required
+                          disabled
                         />
                       </div>
 

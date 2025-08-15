@@ -280,6 +280,13 @@ const ScoreModal: React.FC<ScoreModalProps> = ({ isOpen, onClose, classroom, add
         [classroom.classroomId]
     );
 
+    // Cancel debounce on unmount
+    useEffect(() => {
+        return () => {
+            debouncedFetchScores.cancel();
+        };
+    }, [debouncedFetchScores]);
+
     // Fetch scores with optional studentId filter
     const fetchScores = async (newCursor: number, studentId: number = -999) => {
         try {
@@ -302,11 +309,13 @@ const ScoreModal: React.FC<ScoreModalProps> = ({ isOpen, onClose, classroom, add
                 setCursor(nextCursor);
                 setHasNext(hasNext);
             } else {
+                console.error("Invalid data format from server:", response.data);
                 setScores([]);
                 setHasNext(false);
                 addAlert("error", "Error", "Data is not valid from server");
             }
         } catch (err) {
+            console.error("Error fetching scores:", err);
             setScores([]);
             setHasNext(false);
             addAlert("error", "Error", err instanceof Error ? err.message : "Can not get list scores");
@@ -335,13 +344,15 @@ const ScoreModal: React.FC<ScoreModalProps> = ({ isOpen, onClose, classroom, add
             const avgMid = groups.midterm.length > 0 ? groups.midterm.reduce((a, b) => a + b, 0) / groups.midterm.length : 0;
             const avgFin = groups.final.length > 0 ? groups.final.reduce((a, b) => a + b, 0) / groups.final.length : 0;
             const avg = avgReg * 0.1 + avgMid * 0.3 + avgFin * 0.6;
-            averages.push({
-                scoreDetailId: fakeId--,
-                score: avg,
-                studentId,
-                classroomId: classroom.classroomId,
-                typeofscore: "AVERAGE",
-            });
+            if (avg > 0) {
+                averages.push({
+                    scoreDetailId: fakeId--,
+                    score: Number(avg.toFixed(2)),
+                    studentId,
+                    classroomId: classroom.classroomId,
+                    typeofscore: "AVERAGE",
+                });
+            }
         });
         return averages;
     };
@@ -350,7 +361,8 @@ const ScoreModal: React.FC<ScoreModalProps> = ({ isOpen, onClose, classroom, add
     useEffect(() => {
         let temp = scores;
         if (filterScoreType === "AVERAGE") {
-            setFilteredScores(calculateAverages());
+            const averages = calculateAverages();
+            setFilteredScores(averages);
         } else {
             if (filterScoreType !== "ALL") {
                 temp = temp.filter((s) => s.typeofscore === filterScoreType);
@@ -377,7 +389,10 @@ const ScoreModal: React.FC<ScoreModalProps> = ({ isOpen, onClose, classroom, add
     // Load scores when modal opens
     useEffect(() => {
         if (isOpen) {
-            fetchScores(0, filterStudentId === "" ? -999 : parseInt(String(filterStudentId)));
+            const studentId = filterStudentId === "" ? -999 : parseInt(String(filterStudentId));
+            if (!isNaN(studentId)) {
+                fetchScores(0, studentId);
+            }
         }
     }, [isOpen, classroom.classroomId]);
 
@@ -444,13 +459,11 @@ const ScoreModal: React.FC<ScoreModalProps> = ({ isOpen, onClose, classroom, add
                 addAlert("error", "Error", response.data.message || "Can not create score");
                 return;
             }
-            setScores([...scores, response.data.result]);
             addAlert("success", "Thành công", "Create score successfully");
             closeFormModal();
-            const studentId = filterStudentId === "" ? -999 : parseInt(String(filterStudentId));
-            if (!isNaN(studentId)) {
-                fetchScores(cursor, studentId);
-            }
+            setFilterStudentId(""); // Reset filter
+            setFilterScoreType("ALL"); // Reset filter
+            fetchScores(0, -999); // Reload all scores
         } catch (err) {
             addAlert("error", "Error", err instanceof Error ? err.message : "Can not create score");
         }
@@ -459,17 +472,20 @@ const ScoreModal: React.FC<ScoreModalProps> = ({ isOpen, onClose, classroom, add
     // Handle save edited score
     const handleSave = async (scoreDetailId: number, updatedData: Partial<ScoreCreateRequest>) => {
         try {
-            await api.put(`/score/update`, { ...updatedData, scoreDetailId });
+            const response = await api.put(`/score/update`, { ...updatedData, scoreDetailId });
+            if (response.data.code !== 0) {
+                addAlert("error", "Error", response.data.message || "Can not update score");
+                return;
+            }
             setScores(
                 scores.map((s) =>
                     s.scoreDetailId === scoreDetailId ? { ...s, ...updatedData } : s
                 )
             );
             addAlert("success", "Success", "Update score successfully");
-            const studentId = filterStudentId === "" ? -999 : parseInt(String(filterStudentId));
-            if (!isNaN(studentId)) {
-                fetchScores(cursor, studentId);
-            }
+            setFilterStudentId(""); // Reset filter
+            setFilterScoreType("ALL"); // Reset filter
+            fetchScores(0, -999); // Reload all scores
         } catch (err) {
             addAlert("error", "Error", err instanceof Error ? err.message : "Can not update score");
         }
@@ -493,10 +509,9 @@ const ScoreModal: React.FC<ScoreModalProps> = ({ isOpen, onClose, classroom, add
             setScores(scores.filter((s) => s.scoreDetailId !== confirmDeleteScoreId));
             setConfirmDeleteScoreId(null);
             addAlert("success", "Success", "Delete score successfully");
-            const studentId = filterStudentId === "" ? -999 : parseInt(String(filterStudentId));
-            if (!isNaN(studentId)) {
-                fetchScores(cursor, studentId);
-            }
+            setFilterStudentId(""); // Reset filter
+            setFilterScoreType("ALL"); // Reset filter
+            fetchScores(0, -999); // Reload all scores
         } catch (err) {
             addAlert("error", "Error", err instanceof Error ? err.message : "Không thể xóa điểm");
         }
@@ -705,6 +720,13 @@ export default function ScoreManagement() {
         []
     );
 
+    // Cancel debounce on unmount
+    useEffect(() => {
+        return () => {
+            debouncedFetchClassrooms.cancel();
+        };
+    }, [debouncedFetchClassrooms]);
+
     // Fetch classrooms with pagination and optional classroomId filter
     const fetchClassrooms = async (newCursor: number, classroomId: string = "") => {
         try {
@@ -724,11 +746,13 @@ export default function ScoreManagement() {
                 setCursor(newCursor + pageSize);
                 setHasNext(classroomsData.length === pageSize);
             } else {
+                console.error("Invalid classroom data format:", response.data);
                 setClassrooms([]);
                 setHasNext(false);
                 addAlert("error", "Error", "Dữ liệu lớp học không hợp lệ từ server");
             }
         } catch (err) {
+            console.error("Error fetching classrooms:", err);
             setClassrooms([]);
             setHasNext(false);
             addAlert("error", "Error", err instanceof Error ? err.message : "Không thể tải danh sách lớp học");

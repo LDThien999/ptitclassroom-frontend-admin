@@ -308,8 +308,17 @@ const QuestionModal: React.FC<QuestionModalProps> = ({ isOpen, onClose, subjectI
             return;
         }
 
+        // Check for duplicate options
+        const options = [formData.optionA, formData.optionB, formData.optionC, formData.optionD];
+        const uniqueOptions = new Set(options);
+        if (uniqueOptions.size !== options.length) {
+            addAlert("error", "Error", "Options must be unique. Two or more options are identical.");
+            return;
+        }
+
         try {
             if (editingQuestionId === null) {
+                console.log("formData", formData);
                 const response = await api.post<ApiResponse<Question>>("/questions/create", formData);
                 if (response.data.code !== 0) {
                     addAlert("error", "Error", response.data.message || "Unable to create question");
@@ -353,7 +362,7 @@ const QuestionModal: React.FC<QuestionModalProps> = ({ isOpen, onClose, subjectI
 
         try {
             const response = await api.delete(`/questions/${confirmDeleteQuestionId}`);
-            if (response.status !== 200) {
+            if (response.data.code !== 0) {
                 addAlert("error", "Error", "Unable to delete question");
                 return;
             }
