@@ -13,12 +13,19 @@ const ReactApexChart = dynamic(() => import("react-apexcharts"), {
   ssr: false,
 });
 
-// Interfaces from ScoreStatisticsChart
+// Updated Classroom interface to match ClassroomSubjectResponse
 interface Classroom {
-  classroomId: string;
-  total: number;
-  subjectId: number;
-  subjectName: string;
+  id: number;
+  name: string;
+  subject: {
+    id: number;
+    name: string;
+  };
+  meetLink: string;
+  isPublic: boolean;
+  teacherUsername: string;
+  classCode: string;
+  createdAt: string;
 }
 
 interface ScoreResponse {
@@ -53,6 +60,7 @@ export default function ScoreAboveFiveChart() {
   const [selectedClassroomId, setSelectedClassroomId] = useState<string>("");
   const [allScores, setAllScores] = useState<ScoreResponse[]>([]);
   const [selectedScoreType, setSelectedScoreType] = useState<string>("REGULAR");
+  const [threshold, setThreshold] = useState<number>(5); // Default threshold is 5
   const [loading, setLoading] = useState<boolean>(false);
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [isOpen, setIsOpen] = useState(false);
@@ -79,7 +87,7 @@ export default function ScoreAboveFiveChart() {
       const classroomsData = response.data.result || [];
       setClassrooms(classroomsData);
       if (classroomsData.length > 0) {
-        setSelectedClassroomId(classroomsData[0].classroomId);
+        setSelectedClassroomId(classroomsData[0].id.toString()); // Use id as value for selectedClassroomId
       }
     } catch (err) {
       addAlert("error", "Error", err instanceof Error ? err.message : "Failed to load classrooms");
@@ -118,16 +126,18 @@ export default function ScoreAboveFiveChart() {
     }
   };
 
-  // Calculate percentage of students scoring above 5 for a specific score type
-  const getAboveFivePercentage = useMemo(() => (scores: ScoreResponse[], type: string) => {
+  // Calculate percentage and counts of students scoring above threshold for a specific score type
+  const getAboveThresholdData = useMemo(() => (scores: ScoreResponse[], type: string) => {
     const filteredScores = scores.filter((s) => s.typeofscore === type);
-    if (filteredScores.length === 0) return 0;
-    const aboveFive = filteredScores.filter((s) => s.score > 5).length;
-    return Number(((aboveFive / filteredScores.length) * 100).toFixed(2));
-  }, []);
+    if (filteredScores.length === 0) return { percentage: 0, aboveThreshold: 0, total: 0 };
+    const aboveThreshold = filteredScores.filter((s) => s.score > threshold).length;
+    const total = filteredScores.length;
+    const percentage = Number(((aboveThreshold / total) * 100).toFixed(2));
+    return { percentage, aboveThreshold, total };
+  }, [threshold]);
 
-  // Calculate percentage of students with average scores above 5
-  const averageAboveFivePercentage = useMemo(() => {
+  // Calculate percentage and counts of students with average scores above threshold
+  const averageAboveThresholdData = useMemo(() => {
     const studentScores = new Map<number, { regular: number[]; midterm: number[]; final: number[] }>();
     allScores.forEach((score) => {
       if (!studentScores.has(score.studentId)) {
@@ -146,18 +156,34 @@ export default function ScoreAboveFiveChart() {
       const avg = avgReg * 0.1 + avgMid * 0.3 + avgFin * 0.6;
       avgScores.push(avg);
     });
-    if (avgScores.length === 0) return 0;
-    const aboveFive = avgScores.filter((score) => score > 5).length;
-    return Number(((aboveFive / avgScores.length) * 100).toFixed(2));
-  }, [allScores]);
+    if (avgScores.length === 0) return { percentage: 0, aboveThreshold: 0, total: 0 };
+    const aboveThreshold = avgScores.filter((score) => score > threshold).length;
+    const total = avgScores.length;
+    const percentage = Number(((aboveThreshold / total) * 100).toFixed(2));
+    return { percentage, aboveThreshold, total };
+  }, [allScores, threshold]);
 
-  // Select percentage based on score type
+  // Select data based on score type
   const series = useMemo(() => {
     if (selectedScoreType === "AVERAGE") {
-      return [averageAboveFivePercentage];
+      return [averageAboveThresholdData.percentage];
     }
-    return [getAboveFivePercentage(allScores, selectedScoreType)];
-  }, [allScores, selectedScoreType, averageAboveFivePercentage, getAboveFivePercentage]);
+    return [getAboveThresholdData(allScores, selectedScoreType).percentage];
+  }, [allScores, selectedScoreType, averageAboveThresholdData, getAboveThresholdData]);
+
+  // Get counts for description
+  const studentCounts = useMemo(() => {
+    if (selectedScoreType === "AVERAGE") {
+      return {
+        aboveThreshold: averageAboveThresholdData.aboveThreshold,
+        total: averageAboveThresholdData.total,
+      };
+    }
+    return {
+      aboveThreshold: getAboveThresholdData(allScores, selectedScoreType).aboveThreshold,
+      total: getAboveThresholdData(allScores, selectedScoreType).total,
+    };
+  }, [allScores, selectedScoreType, averageAboveThresholdData, getAboveThresholdData]);
 
   useEffect(() => {
     fetchClassrooms();
@@ -214,7 +240,7 @@ export default function ScoreAboveFiveChart() {
     stroke: {
       lineCap: "round",
     },
-    labels: ["Students Above 5"],
+    labels: [`Students Above ${threshold}`],
   };
 
   const toggleDropdown = () => {
@@ -244,10 +270,10 @@ export default function ScoreAboveFiveChart() {
         <div className="flex justify-between">
           <div>
             <h3 className="text-lg font-semibold text-gray-800 dark:text-white/90">
-              Students Scoring Above 5
+              Students Scoring Above {threshold}
             </h3>
             <p className="mt-1 font-normal text-gray-500 text-theme-sm dark:text-gray-400">
-              Percentage of students with scores above 5 for the selected exam
+              Percentage of students with scores above {threshold} for the selected exam
             </p>
           </div>
           <div className="relative inline-block">
@@ -281,8 +307,8 @@ export default function ScoreAboveFiveChart() {
           >
             <option value="">Select Classroom</option>
             {classrooms.map((c) => (
-              <option key={c.classroomId} value={c.classroomId}>
-                {c.classroomId} - {c.subjectName}
+              <option key={c.id} value={c.id.toString()}>
+                {c.name} - {c.subject.name} {/* Display class name and subject name */}
               </option>
             ))}
           </select>
@@ -296,6 +322,16 @@ export default function ScoreAboveFiveChart() {
             <option value="FINAL">Final Scores</option>
             <option value="AVERAGE">Average Scores</option>
           </select>
+          <input
+            type="number"
+            min="0"
+            max="10"
+            step="0.1"
+            value={threshold}
+            onChange={(e) => setThreshold(parseFloat(e.target.value))}
+            placeholder="Threshold"
+            className="rounded-md border border-gray-300 dark:border-gray-600 p-2 text-sm text-gray-800 dark:text-white dark:bg-gray-700 w-17 text-center"
+          />
         </div>
 
         {loading ? (
@@ -316,15 +352,22 @@ export default function ScoreAboveFiveChart() {
           </div>
         ) : (
           <div className="text-center text-gray-800 dark:text-white/90">
-            Please select a classroom to view the percentage of students scoring above 5.
+            Please select a classroom to view the percentage of students scoring above {threshold}.
           </div>
         )}
 
-        <p className="mx-auto mt-10 w-full max-w-[380px] text-center text-sm text-gray-500 sm:text-base">
-          {series[0] > 0
-            ? `${series[0]}% of students scored above 5 in the selected exam. Keep up the good work!`
-            : "No data available for the selected classroom and score type."}
-        </p>
+        <div className="mx-auto mt-10 w-full max-w-[380px] text-center text-sm text-gray-500 sm:text-base">
+          <p>
+            {series[0] > 0
+              ? `${series[0]}% of students scored above ${threshold} in the selected exam. Keep up the good work!`
+              : "No data available for the selected classroom and score type."}
+          </p>
+          {series[0] > 0 && (
+            <p className="mt-2">
+              {studentCounts.aboveThreshold}/{studentCounts.total} students scored above {threshold}.
+            </p>
+          )}
+        </div>
       </div>
     </div>
   );

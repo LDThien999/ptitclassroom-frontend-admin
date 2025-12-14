@@ -8,10 +8,19 @@ import {
     TableRow,
 } from "@/components/ui/table";
 import Button from "@/components/ui/button/Button";
-import { UserResponse } from "../UserManagement";
+
+interface UserProfileResponse {
+    id: string;
+    userId: number;
+    username: string;
+    fullName: string;
+    email: string;
+    dob: string;
+    avatar?: string;
+}
 
 interface UserTableProps {
-    users: UserResponse[];
+    users: UserProfileResponse[];
     handleEdit: (userId: number) => void;
     confirmDelete: (userId: number) => void;
     handleNextPage: () => void;
@@ -40,7 +49,7 @@ export default function UserTable({
                                     isHeader
                                     className="px-5 py-3 font-medium text-gray-500 text-start text-theme-xs dark:text-gray-400"
                                 >
-                                    User Information
+                                    Student Information
                                 </TableCell>
                                 <TableCell
                                     isHeader
@@ -59,12 +68,6 @@ export default function UserTable({
                                     className="px-5 py-3 font-medium text-gray-500 text-start text-theme-xs dark:text-gray-400"
                                 >
                                     Date of Birth
-                                </TableCell>
-                                <TableCell
-                                    isHeader
-                                    className="px-5 py-3 font-medium text-gray-500 text-start text-theme-xs dark:text-gray-400"
-                                >
-                                    Role
                                 </TableCell>
                                 <TableCell
                                     isHeader
@@ -91,6 +94,7 @@ export default function UserTable({
                                                     height={40}
                                                     src={user.avatar || "/default-avatar.png"}
                                                     alt={user.fullName}
+                                                    className="object-cover"
                                                 />
                                             </div>
                                             <div>
@@ -108,9 +112,6 @@ export default function UserTable({
                                     </TableCell>
                                     <TableCell className="px-4 py-3 text-gray-500 text-start text-theme-sm dark:text-gray-400">
                                         {new Date(user.dob).toLocaleDateString("en-GB")}
-                                    </TableCell>
-                                    <TableCell className="px-4 py-3 text-gray-500 text-start text-theme-sm dark:text-gray-400">
-                                        {user.roles}
                                     </TableCell>
                                     <TableCell className="px-4 py-3 text-start">
                                         <Button

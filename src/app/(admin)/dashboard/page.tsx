@@ -1,11 +1,12 @@
 import type { Metadata } from "next";
-import EcommerceMetrics from "@/components/ecommerce/EcommerceMetrics";
+import EcommerceMetrics from "@/components/analysis/EcommerceMetrics";
 import React from "react";
-import MonthlyTarget from "@/components/ecommerce/MonthlyTarget";
-import MonthlySalesChart from "@/components/ecommerce/MonthlySalesChart";
-import StatisticsChart from "@/components/ecommerce/StatisticsChart";
-import RecentOrders from "@/components/ecommerce/RecentOrders";
-import DemographicCard from "@/components/ecommerce/DemographicCard";
+import MonthlyTarget from "@/components/analysis/MonthlyTarget";
+import MonthlySalesChart from "@/components/analysis/MonthlySalesChart";
+import StatisticsChart from "@/components/analysis/StatisticsChart";
+import RecentOrders from "@/components/analysis/RecentOrders";
+import DemographicCard from "@/components/analysis/DemographicCard";
+import LineChart from "@/components/analysis/LineChart";
 
 export const metadata: Metadata = {
   title:
@@ -24,6 +25,10 @@ export default function Ecommerce() {
 
       <div className="col-span-12 xl:col-span-5">
         <MonthlyTarget />
+      </div>
+
+      <div className="col-span-12">
+        <LineChart /> {/* Thay StatisticsChart bằng LineChart */}
       </div>
 
       {/* <div className="col-span-12">

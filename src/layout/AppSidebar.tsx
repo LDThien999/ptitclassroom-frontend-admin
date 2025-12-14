@@ -4,6 +4,8 @@ import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { useSidebar } from "../context/SidebarContext";
+import { FiUser, FiBook, FiGrid, FiLayers } from "react-icons/fi";
+import { MdClass, MdScore, MdQuiz } from "react-icons/md";
 import {
   BoxCubeIcon,
   CalenderIcon,
@@ -22,7 +24,7 @@ type NavItem = {
   name: string;
   icon: React.ReactNode;
   path?: string;
-  subItems?: { name: string; path: string; pro?: boolean; new?: boolean }[];
+  subItems?: { name: string; path: string; pro?: boolean; new?: boolean, icon?: React.ReactNode; }[];
 };
 
 const navItems: NavItem[] = [
@@ -44,15 +46,20 @@ const navItems: NavItem[] = [
   // },
   {
     name: "Management",
-    icon: <TableIcon />,
+    icon: <FiLayers />,
     subItems: [
-      { name: "Users", path: "/user-management", pro: false },
-      { name: "Classrooms", path: "/classroom-management", pro: false },
-      { name: "Scores", path: "/score-management", pro: false },
-      { name: "Questions", path: "/question-management", pro: false },
+      { name: "Users", path: "/user-management", pro: false, icon: <FiUser /> },
+      { name: "Student", path: "/student-management", pro: false, icon: <FiBook /> },
+      { name: "Teacher", path: "/teacher-management", pro: false, icon: <FiUser /> },
+      { name: "Classrooms", path: "/classroom-management", pro: false, icon: <MdClass /> },
+      { name: "Subjects", path: "/subject-management", pro: false, icon: <FiBook /> },
+      { name: "Scores", path: "/score-management", pro: false, icon: <MdScore /> },
+      { name: "Questions", path: "/question-management", pro: false, icon: <MdQuiz /> },
+      { name: "Logs", path: "/log-management", pro: false, icon: <MdClass /> },
 
     ]
-  },
+  }
+  ,
   {
     icon: <UserCircleIcon />,
     name: "User Profile",
@@ -184,9 +191,21 @@ const AppSidebar: React.FC = () => {
                       className={`menu-dropdown-item ${isActive(subItem.path)
                         ? "menu-dropdown-item-active"
                         : "menu-dropdown-item-inactive"
-                        }`}
+                        } flex items-center gap-2`}
                     >
-                      {subItem.name}
+                      {/* Thêm icon */}
+                      {subItem.icon && (
+                        <span
+                          className={`${isActive(subItem.path)
+                            ? "menu-item-icon-active"
+                            : "menu-item-icon-inactive"
+                            }`}
+                        >
+                          {subItem.icon}
+                        </span>
+                      )}
+                      <span>{subItem.name}</span>
+
                       <span className="flex items-center gap-1 ml-auto">
                         {subItem.new && (
                           <span
@@ -210,6 +229,7 @@ const AppSidebar: React.FC = () => {
                         )}
                       </span>
                     </Link>
+
                   </li>
                 ))}
               </ul>

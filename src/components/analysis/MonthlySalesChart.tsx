@@ -10,11 +10,19 @@ const ReactApexChart = dynamic(() => import("react-apexcharts"), {
   ssr: false,
 });
 
+// Cập nhật interface Classroom để phù hợp với ClassroomSubjectResponse
 interface Classroom {
-  classroomId: string;
-  total: number;
-  subjectId: number;
-  subjectName: string;
+  id: number;
+  name: string;
+  subject: {
+    id: number;
+    name: string;
+  };
+  meetLink: string;
+  isPublic: boolean;
+  teacherUsername: string;
+  classCode: string;
+  createdAt: string;
 }
 
 interface ScoreResponse {
@@ -74,7 +82,7 @@ export default function ScoreStatisticsChart() {
       const classroomsData = response.data.result || [];
       setClassrooms(classroomsData);
       if (classroomsData.length > 0) {
-        setSelectedClassroomId(classroomsData[0].classroomId);
+        setSelectedClassroomId(classroomsData[0].id.toString()); // Sử dụng id làm giá trị cho selectedClassroomId
       }
     } catch (err) {
       addAlert("error", "Error", err instanceof Error ? err.message : "Failed to load classrooms");
@@ -264,8 +272,8 @@ export default function ScoreStatisticsChart() {
           >
             <option value="">Select Classroom</option>
             {classrooms.map((c) => (
-              <option key={c.classroomId} value={c.classroomId}>
-                {c.classroomId} - {c.subjectName}
+              <option key={c.id} value={c.id.toString()}>
+                {c.name} - {c.subject.name} {/* Hiển thị tên lớp và tên môn học */}
               </option>
             ))}
           </select>
